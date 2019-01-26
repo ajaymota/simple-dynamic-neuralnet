@@ -1,4 +1,6 @@
 from numpy import abs, array, dot, exp, mean, random
+import pickle
+import os
 
 class NeuralNet:
 
@@ -7,6 +9,7 @@ class NeuralNet:
     __input_layer = -1
     __output_layer = -1
     __learn_rate = -1
+    __db_path = ""
 
     def __init__(self, hidden_layers=4, nodes_per_layer=4, input_layer=3, output_layer=1, learn_rate=120000):
         self.__hidden_layers = hidden_layers
@@ -14,6 +17,7 @@ class NeuralNet:
         self.__input_layer = input_layer
         self.__output_layer = output_layer
         self.__learn_rate = learn_rate
+        self.__db_path = "pickle.db"
 
     def sigmoid(self, x, deriv=False):
         if (deriv == True):
@@ -42,6 +46,12 @@ class NeuralNet:
             edges_h[i] = 2 * random.random((self.__nodes_per_layer, self.__nodes_per_layer)) - 1
 
         edges_out = 2 * random.random((self.__nodes_per_layer, self.__output_layer)) - 1
+
+        if os.path.isfile(self.__db_path):
+            with open(self.__db_path, "rb") as f:
+                edges_in = pickle.load(f)
+                edges_h = pickle.load(f)
+                edges_out = pickle.load(f)
 
         for j in range(self.__learn_rate):
 
@@ -84,6 +94,11 @@ class NeuralNet:
                 edges_h[i] += layers_h[i].T.dot(layers_h_delta[i+1])
 
             edges_in += layer_in.T.dot(layers_h_delta[0])
+
+        with open(self.__db_path, "wb") as f:
+            pickle.dump(edges_in, f)
+            pickle.dump(edges_h, f)
+            pickle.dump(edges_out, f)
 
 
 instance = NeuralNet()
