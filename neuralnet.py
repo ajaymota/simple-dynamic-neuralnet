@@ -1,105 +1,115 @@
-from numpy import abs, array, dot, exp, mean, random
+import numpy as np
+import random
 import pickle
 import os
 
-class NeuralNet:
 
-    __hidden_layers = -1
-    __nodes_per_layer = -1
-    __input_layer = -1
-    __output_layer = -1
-    __learn_rate = -1
-    __db_path = ""
+def nonlin(x, deriv=False):
+    if deriv:
+        return x * (1 - x)
 
-    def __init__(self, hidden_layers=4, nodes_per_layer=4, input_layer=3, output_layer=1, learn_rate=120000):
-        self.__hidden_layers = hidden_layers
-        self.__nodes_per_layer = nodes_per_layer
-        self.__input_layer = input_layer
-        self.__output_layer = output_layer
-        self.__learn_rate = learn_rate
-        self.__db_path = "pickle.db"
+    return 1 / (1 + np.exp(-x))
 
-    def sigmoid(self, x, deriv=False):
-        if (deriv == True):
-            return x * (1 - x)
 
-        return 1 / (1 + exp(-x))
+def dropout(model, rate):
+    for row in range(len(model)):
+        for col in range(row):
+            if random.uniform(0, 1) > rate:
+                model[row][col] = 0
 
-    def main(self):
-        input = array([[0, 0, 1],
-                   [0, 1, 1],
-                   [1, 0, 1],
-                   [1, 1, 1]])
+    model = model / rate
 
-        output = array([[0],
-                   [1],
-                   [1],
-                   [0]])
+    return model
 
-        random.seed(1)
 
-        # randomly initialize our weights with mean 0
-        edges_in = 2 * random.random((self.__input_layer, self.__nodes_per_layer)) - 1
-        edges_h = [None] * (self.__hidden_layers-1)
+def train(X, Y, learning_rate, dropout_rate, batch_size, epochs, num_hidden_layers, hidden_nodes_per_layer, iterations):
+    X = np.array([[0, 0, 1],
+                  [0, 1, 1],
+                  [1, 0, 1],
+                  [1, 1, 1]])
 
-        for i in range(self.__hidden_layers-1):
-            edges_h[i] = 2 * random.random((self.__nodes_per_layer, self.__nodes_per_layer)) - 1
+    Y = np.array([[0],
+                  [1],
+                  [1],
+                  [0]])
 
-        edges_out = 2 * random.random((self.__nodes_per_layer, self.__output_layer)) - 1
+    np.random.seed(1)
 
-        if os.path.isfile(self.__db_path):
-            with open(self.__db_path, "rb") as f:
-                edges_in = pickle.load(f)
-                edges_h = pickle.load(f)
-                edges_out = pickle.load(f)
+    x_batches = [X[i:i + batch_size] for i in range(0, len(X), batch_size)]
+    y_batches = [Y[i:i + batch_size] for i in range(0, len(Y), batch_size)]
 
-        for j in range(self.__learn_rate):
+    for epoch in range(epochs):
+        for x, y in zip(x_batches, y_batches):
 
-            # Feed forward through layers 0, 1, and 2
-            layer_in = input
-            layers_h = [None] * self.__hidden_layers
+            # randomly initialize our weights with mean 0
+            edges_in = 2 * np.random.random((len(x[0]), len(x))) - 1
 
-            for i in range(self.__hidden_layers):
+            edges_h = [None] * (num_hidden_layers - 1)
+
+            for i in range(num_hidden_layers - 1):
                 if i == 0:
-                    layers_h[i] = self.sigmoid(dot(layer_in, edges_in))
+                    edges_h[i] = 2 * np.random.random((len(x), hidden_nodes_per_layer)) - 1
                 else:
-                    layers_h[i] = self.sigmoid(dot(layers_h[i-1], edges_h[i-1]))
+                    edges_h[i] = 2 * np.random.random((hidden_nodes_per_layer, hidden_nodes_per_layer)) - 1
 
-            layer_out = self.sigmoid(dot(layers_h[self.__hidden_layers-1], edges_out))
+            edges_out = 2 * np.random.random((hidden_nodes_per_layer, len(y[0]))) - 1
 
-            # how much did we miss the target value?
-            layer_out_error = output - layer_out
+            if os.path.isfile("pickle.db"):
+                with open("pickle.db", "rb") as f:
+                    edges_in = pickle.load(f)
+                    edges_h = pickle.load(f)
+                    edges_out = pickle.load(f)
 
-            if (j % 10000) == 0:
-                print("Error:" + str(mean(abs(layer_out_error))))
+            for j in range(iterations):
 
-            # in what direction is the target value?
-            # were we really sure? if so, don't change too much.
-            layer_out_delta = layer_out_error * self.sigmoid(layer_out, deriv=True)
+                # Feed forward through layers 0, 1, and 2
+                layer_in = x
+                layers_h = [None] * num_hidden_layers
+                for i in range(num_hidden_layers):
+                    if i == 0:
+                        layers_h[i] = nonlin(np.dot(layer_in, edges_in))
+                    else:
+                        layers_h[i - 1] = dropout(layers_h[i - 1], dropout_rate)
+                        layers_h[i] = nonlin(np.dot(layers_h[i - 1], edges_h[i - 1]))
 
-            layers_h_error = [None] * self.__hidden_layers
-            layers_h_delta = [None] * self.__hidden_layers
+                layer_out = nonlin(np.dot(layers_h[num_hidden_layers - 1], edges_out))
 
-            ###################################################################################
-            for i in reversed(range(self.__hidden_layers)):
-                if i == (self.__hidden_layers-1):
-                    layers_h_error[i] = layer_out_delta.dot(edges_out.T)
-                    layers_h_delta[i] = layers_h_error[i] * self.sigmoid(layers_h[i], deriv=True)
-                else:
-                    layers_h_error[i] = layers_h_delta[i+1].dot(edges_h[i].T)
-                    layers_h_delta[i] = layers_h_error[i] * self.sigmoid(layers_h[i], deriv=True)
+                # how much did we miss the target value?
+                layer_out_error = y - layer_out
 
-            edges_out += layers_h[self.__hidden_layers-1].T.dot(layer_out_delta)
-            for i in reversed(range(self.__hidden_layers-1)):
-                edges_h[i] += layers_h[i].T.dot(layers_h_delta[i+1])
+                if (j % 10000) == 0:
+                    print("Error:" + str(np.mean(np.abs(layer_out_error))))
 
-            edges_in += layer_in.T.dot(layers_h_delta[0])
+                # in what direction is the target value?
+                # were we really sure? if so, don't change too much.
+                layer_out_delta = layer_out_error * nonlin(layer_out, deriv=True)
 
-        with open(self.__db_path, "wb") as f:
+                layers_h_error = [None] * num_hidden_layers
+                layers_h_delta = [None] * num_hidden_layers
+
+                ###################################################################################
+                for i in reversed(range(num_hidden_layers)):
+                    if i == (num_hidden_layers - 1):
+                        layers_h_error[i] = layer_out_delta.dot(edges_out.T)
+                        layers_h_delta[i] = layers_h_error[i] * nonlin(layers_h[i], deriv=True)
+                    else:
+                        layers_h_error[i] = layers_h_delta[i + 1].dot(edges_h[i].T)
+                        layers_h_delta[i] = layers_h_error[i] * nonlin(layers_h[i], deriv=True)
+
+                edges_out += layers_h[num_hidden_layers - 1].T.dot(layer_out_delta)
+                for i in reversed(range(num_hidden_layers - 1)):
+                    edges_h[i] += layers_h[i].T.dot(layers_h_delta[i + 1])
+
+                edges_in += learning_rate * layer_in.T.dot(layers_h_delta[0])
+
+        # print(layer_out)
+
+        with open("pickle.db", "wb") as f:
             pickle.dump(edges_in, f)
             pickle.dump(edges_h, f)
             pickle.dump(edges_out, f)
 
 
-instance = NeuralNet()
-instance.main()
+# train(X, Y, learning_rate, dropout_rate, batch_size, epochs, num_hidden_layers, hidden_nodes_per_layer, iterations)
+train(0, 0, 1, 1, 4, 5000, 3, 5, 5)
+
