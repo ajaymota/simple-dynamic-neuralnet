@@ -23,6 +23,12 @@ def dropout(model, rate):
 
 
 def train(X, Y, learning_rate, dropout_rate, batch_size, epochs, num_hidden_layers, hidden_nodes_per_layer, iterations):
+    batch_size = int(round(batch_size))
+    epochs = int(round(epochs))
+    num_hidden_layers = int(round(num_hidden_layers))
+    hidden_nodes_per_layer = int(round(hidden_nodes_per_layer))
+    iterations = int(round(iterations))
+
     X = np.array([[0, 0, 1],
                   [0, 1, 1],
                   [1, 0, 1],
@@ -54,8 +60,8 @@ def train(X, Y, learning_rate, dropout_rate, batch_size, epochs, num_hidden_laye
 
             edges_out = 2 * np.random.random((hidden_nodes_per_layer, len(y[0]))) - 1
 
-            if os.path.isfile("pickle.db"):
-                with open("pickle.db", "rb") as f:
+            if os.path.isfile("db/pickle.db" + str(num_hidden_layers) + str(hidden_nodes_per_layer)):
+                with open("db/pickle.db" + str(num_hidden_layers) + str(hidden_nodes_per_layer), "rb") as f:
                     edges_in = pickle.load(f)
                     edges_h = pickle.load(f)
                     edges_out = pickle.load(f)
@@ -77,8 +83,8 @@ def train(X, Y, learning_rate, dropout_rate, batch_size, epochs, num_hidden_laye
                 # how much did we miss the target value?
                 layer_out_error = y - layer_out
 
-                if (j % 10000) == 0:
-                    print("Error:" + str(np.mean(np.abs(layer_out_error))))
+                #if (j % 10000) == 0:
+                #    print("Error:" + str(np.mean(np.abs(layer_out_error))))
 
                 # in what direction is the target value?
                 # were we really sure? if so, don't change too much.
@@ -96,20 +102,20 @@ def train(X, Y, learning_rate, dropout_rate, batch_size, epochs, num_hidden_laye
                         layers_h_error[i] = layers_h_delta[i + 1].dot(edges_h[i].T)
                         layers_h_delta[i] = layers_h_error[i] * nonlin(layers_h[i], deriv=True)
 
-                edges_out += layers_h[num_hidden_layers - 1].T.dot(layer_out_delta)
+                edges_out += learning_rate * layers_h[num_hidden_layers - 1].T.dot(layer_out_delta)
                 for i in reversed(range(num_hidden_layers - 1)):
-                    edges_h[i] += layers_h[i].T.dot(layers_h_delta[i + 1])
+                    edges_h[i] += learning_rate * layers_h[i].T.dot(layers_h_delta[i + 1])
 
                 edges_in += learning_rate * layer_in.T.dot(layers_h_delta[0])
 
-        # print(layer_out)
-
-        with open("pickle.db", "wb") as f:
+        with open("db/pickle.db" + str(num_hidden_layers) + str(hidden_nodes_per_layer), "wb") as f:
             pickle.dump(edges_in, f)
             pickle.dump(edges_h, f)
             pickle.dump(edges_out, f)
 
+        return 1 - np.mean(np.abs(layer_out_error))
+
 
 # train(X, Y, learning_rate, dropout_rate, batch_size, epochs, num_hidden_layers, hidden_nodes_per_layer, iterations)
-train(0, 0, 1, 1, 4, 5000, 3, 5, 5)
+train(0, 0, 1, 1, 4, 1000, 3, 5, 1)
 
